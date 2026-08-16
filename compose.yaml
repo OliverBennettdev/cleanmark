@@ -1,0 +1,30 @@
+services:
+  cleaner:
+    build:
+      context: .
+      dockerfile: services/cleaner/Dockerfile
+    read_only: true
+    tmpfs:
+      - /tmp:size=256m,mode=1777
+    security_opt:
+      - no-new-privileges:true
+    healthcheck:
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8765/health', timeout=2).read()"]
+      interval: 10s
+      timeout: 3s
+      retries: 5
+
+  web:
+    build:
+      context: .
+      dockerfile: apps/web/Dockerfile
+    environment:
+      CLEANER_SERVICE_URL: http://cleaner:8765
+      NEXT_TELEMETRY_DISABLED: "1"
+    depends_on:
+      cleaner:
+        condition: service_healthy
+    ports:
+      - "3000:3000"
+    security_opt:
+      - no-new-privileges:true
