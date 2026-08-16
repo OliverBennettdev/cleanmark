@@ -46,8 +46,11 @@ def parse_multipart(body: bytes, content_type: str) -> tuple[str, bytes]:
         raise ValueError("missing multipart boundary")
     delimiter = b"--" + boundary.encode("ascii", "strict")
     for part in body.split(delimiter):
-        part = part.strip(b"\r\n")
-        if not part or part == b"--":
+        if part.startswith(b"--"):
+            continue
+        if part.startswith(b"\r\n"):
+            part = part[2:]
+        if not part:
             continue
         header_blob, separator, payload = part.partition(b"\r\n\r\n")
         if not separator:
@@ -76,6 +79,7 @@ class Handler(BaseHTTPRequestHandler):
     server_version = f"Cleanmark/{VERSION}"
 
     def log_message(self, fmt: str, *args: object) -> None:
+        # Request path/status are useful; bodies and filenames are deliberately not logged.
         print(f"cleanmark: {fmt % args}")
 
     def _send_json(self, status: int, payload: dict[str, Any]) -> None:
@@ -90,7 +94,7 @@ class Handler(BaseHTTPRequestHandler):
     def _error(self, status: int, code: str, message: str) -> None:
         self._send_json(status, {"ok": False, "error": {"code": code, "message": message}})
 
-    def do_GET(self) -> None:
+    def do_GET(self) -> None:  # noqa: N802
         if self.path == "/health":
             self._send_json(HTTPStatus.OK, {"ok": True, "version": VERSION})
         elif self.path == "/capabilities":
@@ -98,7 +102,7 @@ class Handler(BaseHTTPRequestHandler):
         else:
             self._error(HTTPStatus.NOT_FOUND, "not-found", "not found")
 
-    def do_POST(self) -> None:
+    def do_POST(self) -> None:  # noqa: N802
         if self.path not in {"/inspect", "/clean"}:
             self._error(HTTPStatus.NOT_FOUND, "not-found", "not found")
             return
@@ -119,7 +123,10 @@ class Handler(BaseHTTPRequestHandler):
             filename, data = parse_multipart(body, content_type)
             if self.path == "/inspect":
                 kind, report, suspicious = inspect_file(data, filename)
-                self._send_json(HTTPStatus.OK, {"ok": True, "kind": kind, "suspicious": suspicious, "report": report})
+                self._send_json(
+                    HTTPStatus.OK,
+                    {"ok": True, "kind": kind, "suspicious": suspicious, "report": report},
+                )
                 return
             kind, cleaned, report = clean_file(data, filename)
             report_json = json.dumps(report, ensure_ascii=True, separators=(",", ":"))

@@ -50,7 +50,12 @@ def test_safe_name_reduces_paths_to_basename():
 
 def test_text_inspect_reports_hidden_character(server_url):
     body, content_type = _multipart("notes.txt", "hello\u200bworld".encode())
-    request = Request(f"{server_url}/inspect", data=body, headers={"Content-Type": content_type}, method="POST")
+    request = Request(
+        f"{server_url}/inspect",
+        data=body,
+        headers={"Content-Type": content_type},
+        method="POST",
+    )
     with urlopen(request) as response:
         payload = json.load(response)
         assert payload["kind"] == "text"
@@ -60,7 +65,12 @@ def test_text_inspect_reports_hidden_character(server_url):
 
 def test_text_clean_returns_attachment(server_url):
     body, content_type = _multipart("notes.txt", "hello\u200bworld".encode())
-    request = Request(f"{server_url}/clean", data=body, headers={"Content-Type": content_type}, method="POST")
+    request = Request(
+        f"{server_url}/clean",
+        data=body,
+        headers={"Content-Type": content_type},
+        method="POST",
+    )
     with urlopen(request) as response:
         assert response.read() == b"helloworld"
         assert response.headers["Content-Disposition"] == 'attachment; filename="notes.cleaned.txt"'
@@ -90,3 +100,16 @@ def test_declared_oversize_request_returns_413(server_url):
     assert response.status == 413
     assert payload["error"]["code"] == "too-large"
     connection.close()
+
+
+def test_text_clean_preserves_file_crlf_at_boundaries(server_url):
+    original = b"\r\nhello\xe2\x80\x8bworld\r\n"
+    body, content_type = _multipart("notes.txt", original)
+    request = Request(
+        f"{server_url}/clean",
+        data=body,
+        headers={"Content-Type": content_type},
+        method="POST",
+    )
+    with urlopen(request) as response:
+        assert response.read() == b"\r\nhelloworld\r\n"
