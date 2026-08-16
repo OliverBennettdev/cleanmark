@@ -44,3 +44,24 @@ jobs:
     steps:
       - uses: actions/checkout@v4
       - run: docker compose config
+      - run: docker compose build
+      - run: docker compose up --detach
+      - name: Smoke test web and cleaner proxy
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent http://127.0.0.1:3000 >/dev/null; then
+              break
+            fi
+            if [ "$attempt" = 30 ]; then
+              docker compose logs
+              exit 1
+            fi
+            sleep 2
+          done
+          printf 'hello\u200bworld' > /tmp/cleanmark-sample.txt
+          curl --fail --silent --show-error \
+            -F file=@/tmp/cleanmark-sample.txt \
+            http://127.0.0.1:3000/api/inspect \
+            | grep 'U+200B'
+      - if: always()
+        run: docker compose down --volumes
